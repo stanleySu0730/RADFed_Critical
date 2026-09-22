@@ -1,0 +1,844 @@
+{
+  "schema_version": 3,
+  "protocol_name": "critical_e_paper_supplement_four_benchmarks_two_timing_profiles",
+  "output_root": "results/paper_experiments",
+  "scientific_note": "Paper-supplement manifest assembled without changing any scientific setting in the source manifests. It contains only MNIST, CIFAR-10, COVFEAT-L, and Shakespeare Transformer under datacenter and edge timing profiles. Calibration uses training clients; fixed-E and epsilon selection use validation clients; final seeds evaluate test clients only after selections are fixed.",
+  "datasets": {
+    "mnist_datacenter": {
+      "client_data_path": "data/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233",
+      "common": {
+        "num_classes": 10,
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "loss",
+        "profile_frequency": 5,
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "device": "auto",
+        "model_name": "ffn",
+        "hidden_size": 200,
+        "ffn_initialization": "kaiming",
+        "rounds": 30,
+        "batch_size": 10,
+        "eval_batch_size": 1024,
+        "learning_rate": 0.002,
+        "weight_decay": 0.0001,
+        "eval_frequency": 1,
+        "profile_clients": 60,
+        "profile_batches": 5,
+        "normalization": "global",
+        "l_smooth_update": "raw",
+        "fixed_timing_costs": true
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 10.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          10.0,
+          15.0,
+          20.0,
+          30.0,
+          50.0,
+          80.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 6
+      }
+    },
+    "mnist_edge": {
+      "client_data_path": "data/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233",
+      "common": {
+        "num_classes": 10,
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "loss",
+        "profile_frequency": 5,
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "ffn",
+        "hidden_size": 200,
+        "ffn_initialization": "kaiming",
+        "rounds": 30,
+        "batch_size": 10,
+        "eval_batch_size": 1024,
+        "learning_rate": 0.002,
+        "weight_decay": 0.0001,
+        "eval_frequency": 1,
+        "profile_clients": 60,
+        "profile_batches": 5,
+        "normalization": "global",
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 10.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          10.0,
+          15.0,
+          20.0,
+          30.0,
+          50.0,
+          80.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 6
+      }
+    },
+    "cifar10_datacenter": {
+      "client_data_path": "data/cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366",
+      "common": {
+        "num_classes": 10,
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "loss",
+        "profile_frequency": 5,
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "device": "auto",
+        "model_name": "mobilenetv2",
+        "hidden_size": 200,
+        "rounds": 30,
+        "batch_size": 16,
+        "eval_batch_size": 64,
+        "learning_rate": 0.2,
+        "weight_decay": 0.0001,
+        "eval_frequency": 1,
+        "profile_clients": 6,
+        "profile_batches": 1,
+        "normalization": "none",
+        "pretrained_mobilenet": true,
+        "mobilenet_weights_path": "mobilenet_checkpoints/mobilenet_v2-7ebf99e0.pth",
+        "l_smooth_update": "raw",
+        "fixed_timing_costs": true
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 100.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      }
+    },
+    "cifar10_edge": {
+      "client_data_path": "data/cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366",
+      "common": {
+        "num_classes": 10,
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "loss",
+        "profile_frequency": 5,
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "mobilenetv2",
+        "hidden_size": 200,
+        "rounds": 30,
+        "batch_size": 16,
+        "eval_batch_size": 64,
+        "learning_rate": 0.2,
+        "weight_decay": 0.0001,
+        "eval_frequency": 1,
+        "profile_clients": 6,
+        "profile_batches": 1,
+        "normalization": "none",
+        "pretrained_mobilenet": true,
+        "mobilenet_weights_path": "mobilenet_checkpoints/mobilenet_v2-7ebf99e0.pth",
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 100.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      }
+    },
+    "covfeat_l_datacenter": {
+      "client_data_path": "data/covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122",
+      "common": {
+        "split_prefix": "fold",
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "f1",
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "ffn",
+        "num_classes": 2,
+        "hidden_size": 64,
+        "ffn_initialization": "kaiming",
+        "rounds": 100,
+        "batch_size": 256,
+        "eval_batch_size": 4096,
+        "learning_rate": 0.2,
+        "weight_decay": 0.0,
+        "eval_frequency": 1,
+        "training_eval_frequency": 5,
+        "profile_frequency": 5,
+        "profile_clients": 6,
+        "profile_batches": 1,
+        "normalization": "local",
+        "normalized_features": 10,
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 8.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5,
+          "max_total_steps": 30
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          8.0,
+          9.6,
+          12.8,
+          16.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 6
+      }
+    },
+    "covfeat_l_edge": {
+      "client_data_path": "data/covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122",
+      "common": {
+        "split_prefix": "fold",
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "f1",
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "ffn",
+        "num_classes": 2,
+        "hidden_size": 64,
+        "ffn_initialization": "kaiming",
+        "rounds": 100,
+        "batch_size": 256,
+        "eval_batch_size": 4096,
+        "learning_rate": 0.2,
+        "weight_decay": 0.0,
+        "eval_frequency": 1,
+        "training_eval_frequency": 5,
+        "profile_frequency": 5,
+        "profile_clients": 6,
+        "profile_batches": 1,
+        "normalization": "local",
+        "normalized_features": 10,
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 8.0,
+          "max_total_steps": 30,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5,
+          "max_total_steps": 30
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          8.0,
+          9.6,
+          12.8,
+          16.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 6
+      }
+    },
+    "shakespeare_transformer_datacenter": {
+      "client_data_path": "data/shakespeare/143_client_data_seed245",
+      "common": {
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "accuracy",
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "transformer",
+        "num_classes": 80,
+        "hidden_size": 128,
+        "sequence_length": 80,
+        "transformer_layers": 4,
+        "transformer_heads": 4,
+        "transformer_ff_size": 512,
+        "transformer_dropout": 0.0,
+        "rounds": 30,
+        "batch_size": 256,
+        "eval_batch_size": 4096,
+        "learning_rate": 0.5,
+        "weight_decay": 0.0,
+        "eval_frequency": 1,
+        "profile_frequency": 10,
+        "profile_clients": 8,
+        "profile_batches": 1,
+        "normalization": "none",
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 0.12,
+          "max_total_steps": 40,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5,
+          "max_total_steps": 40
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          0.12,
+          0.15,
+          0.2,
+          0.3,
+          0.5,
+          0.8,
+          448.0,
+          512.0,
+          640.0,
+          768.0,
+          1024.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 4
+      }
+    },
+    "shakespeare_transformer_edge": {
+      "client_data_path": "data/shakespeare/143_client_data_seed245",
+      "common": {
+        "participation": 0.1,
+        "optimizer": "sgd",
+        "metric": "accuracy",
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "fixed_timing_costs": true,
+        "device": "auto",
+        "model_name": "transformer",
+        "num_classes": 80,
+        "hidden_size": 128,
+        "sequence_length": 80,
+        "transformer_layers": 4,
+        "transformer_heads": 4,
+        "transformer_ff_size": 512,
+        "transformer_dropout": 0.0,
+        "rounds": 30,
+        "batch_size": 256,
+        "eval_batch_size": 4096,
+        "learning_rate": 0.5,
+        "weight_decay": 0.0,
+        "eval_frequency": 1,
+        "profile_frequency": 10,
+        "profile_clients": 8,
+        "profile_batches": 1,
+        "normalization": "none",
+        "l_smooth_update": "raw"
+      },
+      "methods": {
+        "critical": {
+          "r_local_steps": 5,
+          "target_epsilon": 0.12,
+          "max_total_steps": 40,
+          "max_local_steps": 25
+        },
+        "corrected-fixed": {
+          "r_local_steps": 5,
+          "max_total_steps": 40
+        }
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ]
+      },
+      "l_smooth_calibration": {
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "selection_scope": "per_fold",
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "relative_probe_distance": 0.001
+      },
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "require_all_tuning_seeds_feasible": true,
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "epsilon_candidates": [
+          0.12,
+          0.15,
+          0.2,
+          0.3,
+          0.5,
+          0.8,
+          448.0,
+          512.0,
+          640.0,
+          768.0,
+          1024.0
+        ],
+        "automatic_expansion": true,
+        "expansion_trigger": "feasibility_only",
+        "expansion_factor": 2.0,
+        "max_expansions": 4
+      }
+    }
+  }
+}
