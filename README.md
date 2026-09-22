@@ -14,7 +14,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements-pytorch.txt
 ```
 
-The dependency file pins NumPy, Pillow, PyTorch, and torchvision. The PyTorch wheel uses CUDA 12.6, matching the GPU environment used for the recorded experiments.
+The dependency file pins NumPy, Pillow, PyTorch, and torchvision. See [DEPENDENCIES.md](DEPENDENCIES.md) for the version table, CUDA and driver requirements, installation checks, and runtime inputs.
 
 ## Required data
 

@@ -1,3 +1,4 @@
+# Python 3.12; CUDA 12.6 PyTorch wheels. See DEPENDENCIES.md.
 --extra-index-url https://download.pytorch.org/whl/cu126
 numpy==2.5.1
 Pillow==12.3.0
