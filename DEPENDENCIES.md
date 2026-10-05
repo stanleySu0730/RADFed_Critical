@@ -5,7 +5,7 @@ The experiment runner uses Python 3.12. Its third-party Python dependencies are 
 | Package | Pinned version | Use |
 | --- | --- | --- |
 | `numpy` | `2.5.1` | Client data, schedules, and metrics |
-| `Pillow` | `12.3.0` | Image support required by `torchvision` |
+| `Pillow` | `12.3.0` | Image transforms and archived loss-plot support |
 | `torch` | `2.13.0+cu126` | Models, SGD, tensors, and checkpoint loading |
 | `torchvision` | `0.28.0+cu126` | MobileNetV2 and ResNet model definitions |
 
@@ -28,4 +28,4 @@ On Linux, substitute `python3.12 -m venv .venv` and `.venv/bin/python -m pip ...
 .\.venv\Scripts\python.exe -c "import sys, numpy, PIL, torch, torchvision; print(sys.version); print('numpy', numpy.__version__, 'Pillow', PIL.__version__); print('torch', torch.__version__, 'torchvision', torchvision.__version__); print('CUDA available', torch.cuda.is_available())"
 ```
 
-The experiment data partitions and bundled MobileNetV2 checkpoint are runtime inputs, not Python packages. Their locations, download links, and archive checksums are documented in the [README](README.md). Run commands and the eight experiment configurations are also documented there.
+The experiment data partitions and bundled MobileNetV2 checkpoint are runtime inputs, not Python packages. Their locations, download links, and archive checksums are documented in the [README](README.md). Named, versioned reproduction commands and the retained modern configuration are documented there.

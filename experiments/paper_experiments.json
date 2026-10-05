@@ -1,8 +1,8 @@
 {
   "schema_version": 3,
-  "protocol_name": "critical_e_paper_supplement_four_benchmarks_two_timing_profiles",
+  "protocol_name": "maintained_kaiming_nonincreasing_configuration",
   "output_root": "results/paper_experiments",
-  "scientific_note": "Paper-supplement manifest assembled without changing any scientific setting in the source manifests. It contains only MNIST, CIFAR-10, COVFEAT-L, and Shakespeare Transformer under datacenter and edge timing profiles. Calibration uses training clients; fixed-E and epsilon selection use validation clients; final seeds evaluate test clients only after selections are fixed.",
+  "scientific_note": "Modern maintained configuration. Its MNIST/CIFAR-10 settings do not reproduce the archived image results. Use reproduce_paper.py named protocols for archived images and the prospective CIFAR-10 validation/timing rerun; the maintained Kaiming defaults are retained.",
   "datasets": {
     "mnist_datacenter": {
       "client_data_path": "data/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233",

@@ -1,0 +1,220 @@
+{
+  "datasets": {
+    "mnist_datacenter": {
+      "client_data_path": "data/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233",
+      "common": {
+        "batch_size": 10,
+        "device": "auto",
+        "eval_batch_size": 1024,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 200,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.002,
+        "metric": "loss",
+        "model_name": "ffn",
+        "normalization": "global",
+        "num_classes": 10,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 5,
+        "profile_clients": 60,
+        "profile_frequency": 5,
+        "rounds": 30,
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "weight_decay": 0.0001
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          10.0,
+          15.0,
+          20.0,
+          30.0,
+          50.0,
+          80.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 6,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 10.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    },
+    "mnist_edge": {
+      "client_data_path": "data/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233",
+      "common": {
+        "batch_size": 10,
+        "device": "auto",
+        "eval_batch_size": 1024,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 200,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.002,
+        "metric": "loss",
+        "model_name": "ffn",
+        "normalization": "global",
+        "num_classes": 10,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 5,
+        "profile_clients": 60,
+        "profile_frequency": 5,
+        "rounds": 30,
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "weight_decay": 0.0001
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          10.0,
+          15.0,
+          20.0,
+          30.0,
+          50.0,
+          80.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 6,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 10.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  "output_root": "results/mnist_archived_20260901",
+  "protocol_name": "mnist_archived_20260901",
+  "schema_version": 3,
+  "scientific_note": "Epsilon is selected independently per outer fold using validation-only seeds 101, 102, and 103. Every initial candidate is evaluated. If none is feasible for all three seeds through all 30 rounds, the largest candidate is doubled and only that added candidate is evaluated. This feasibility-only expansion repeats for at most six levels and stops at the first level containing a fully feasible candidate. Final seeds and test clients never trigger expansion or select epsilon."
+}

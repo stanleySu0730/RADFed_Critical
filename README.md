@@ -1,8 +1,16 @@
-# RADFed Critical-E experiment supplement
+# RADFed Critical experiment supplement
 
-This repository contains the minimal PyTorch 2.13 / Python 3.12 implementation used for the paper's Critical-E experiments. It includes the training algorithm, theoretical schedule, model definitions, client-data loader, and one consolidated manifest for MNIST, CIFAR-10, COVFEAT-L, and Shakespeare Transformer under both datacenter and edge timing profiles.
+This repository provides the implementations and declared experiment protocols for *Analytically Grounded Robust Aggregation-Delayed Federated Learning*. The named launcher chooses the implementation that corresponds to each recorded experiment.
 
-It intentionally excludes unit tests, diagnostics, plotting code, generated figures, old TensorFlow/Ray code, recovery utilities, Nomad-specific jobs, and previous experimental variants.
+| Protocol | Implementation and behavior |
+| --- | --- |
+| `mnist-archive` | September 1 archived trainer; truncated-normal FFN initialization; raw candidate learning rates; validation-selected tolerance. |
+| `cifar10-archive` | Original CIFAR-10 protocol, retained for historical comparisons. It does not provide a measured historical adaptive tuning cost. |
+| `cifar10-rerun` | Prospective October 4 protocol on the unchanged archived trainer; validation candidates `[50,75,100,150,200,300]`; raw candidate learning rates; every attempt timed and logged. |
+| `covertype` | Maintained trainer; Kaiming hidden weights; validation-selected tolerance; nonincreasing learning rates. |
+| `shakespeare` | Maintained four-layer, four-head Transformer; validation-selected tolerance; nonincreasing learning rates. |
+
+The maintained FFN default remains Kaiming. `experiments/paper_experiments.json` retains the modern eight-entry configuration, but its image settings are not the implementation that generated the archived manuscript results. Use the named protocols below for those results. The archived image sources are immutable and checksum-verified before execution; see [PROTOCOLS.md](PROTOCOLS.md).
 
 ## Environment
 
@@ -22,10 +30,10 @@ Dataset files are not committed because the extracted partitions total approxima
 
 ```text
 data/
-├── 100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233/
-├── cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366/
-├── covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122/
-└── shakespeare/143_client_data_seed245/
+â”œâ”€â”€ 100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_search0.002_piter5e5_biter5e5_5folds_seed233/
+â”œâ”€â”€ cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366/
+â”œâ”€â”€ covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122/
+â””â”€â”€ shakespeare/143_client_data_seed245/
 ```
 
 Documented source archives:
@@ -56,56 +64,53 @@ mobilenet_checkpoints/mobilenet_v2-7ebf99e0.pth
 
 Its SHA-256 is `7ebf99e03e254b273379b23edca7ec0da9f48273b23a332b93c1c99d49e86e8f`.
 
-## Run all paper experiments
+## Validate and run
 
-From the repository root:
-
-```powershell
-.\.venv\Scripts\python.exe run_paper_experiments.py `
-  --config experiments\paper_experiments.json `
-  --resume
-```
-
-The manifest runs the two timing profiles for all four benchmarks. It performs per-fold training-only smoothness calibration, validation-only fixed-E grid search, validation-only epsilon selection where specified, and final evaluation with seeds 1, 2, and 3 over five client folds.
-
-Use repeated `--dataset` options to run only selected entries. For example:
+Run these commands from the repository root. Validation checks the manifest, archived source hashes and selection/final seed separation without launching training:
 
 ```powershell
-.\.venv\Scripts\python.exe run_paper_experiments.py `
-  --config experiments\paper_experiments.json `
-  --dataset mnist_datacenter `
-  --dataset mnist_edge `
-  --resume
+.\.venv\Scripts\python.exe reproduce_paper.py --protocol cifar10-rerun --validate-only
 ```
 
-Available dataset entries are:
+To reproduce the prospective CIFAR-10 experiment:
 
-- `mnist_datacenter`
-- `mnist_edge`
-- `cifar10_datacenter`
-- `cifar10_edge`
-- `covfeat_l_datacenter`
-- `covfeat_l_edge`
-- `shakespeare_transformer_datacenter`
-- `shakespeare_transformer_edge`
+```powershell
+.\.venv\Scripts\python.exe reproduce_paper.py --protocol cifar10-rerun --resume
+.\.venv\Scripts\python.exe audit_cifar10_rerun.py --root results\cifar10-rerun
+```
 
-## Outputs
+The declared matrix has **420 training trials plus 30 shared calibration trials**: two regimes, five folds, three seeds, six fixed budgets, six tolerance candidates and two selected final methods. All three tuning seeds must be feasible before a tolerance is eligible. Selection uses final-round validation loss, with the declared tie breakers. Final seeds alone evaluate test clients. The audit replays selection independently and computes paired fold intervals and full procedure time.
 
-Outputs are written to `results/paper_experiments/`. The runner records the resolved manifest, calibration and selection tables, per-run configurations, current-model validation metrics, profile statistics, final test metrics, method summaries, and paired comparisons. It does not generate graphs or apply a running-best transformation.
+Use the other named protocols in the same launcher:
+
+```powershell
+.\.venv\Scripts\python.exe reproduce_paper.py --protocol mnist-archive --resume
+.\.venv\Scripts\python.exe reproduce_paper.py --protocol covertype --resume
+.\.venv\Scripts\python.exe reproduce_paper.py --protocol shakespeare --resume
+```
+
+To run only one regime, append `--dataset cifar10_datacenter` or `--dataset cifar10_edge` to the CIFAR launcher command. A completed regime can be audited with the matching `--dataset` option; that audit does not certify the complete two-regime matrix. `--output-root` selects a separate output directory. Linux uses `.venv/bin/python` in place of the PowerShell interpreter path.
+
+## Outputs and timing
+
+The launcher writes outputs under `results/<protocol>/`, which is excluded from Git. Every launched subprocess has a durable `execution.json`, a separate `attempts/<number>/process.log`, UTC timestamps, exit status and whole-process elapsed time. Result markers are hashed when written. `runtime_provenance.json` records package versions, GPU information and training/selection source hashes. The archived trainer additionally writes its original round-clock metrics; the two timer scopes are reported separately.
+
+Resume accepts the same manifest, implementation and runtime, and refuses to invent timings for previously unlogged results. Attempt records remain separate when a failed trial is retried. The CIFAR audit stops on missing records, failed attempts, test leakage, ineligible or incorrect selections, modified results or undeclared trials. Failed process attempts require separate diagnosis before costs are reported. A local output lock prevents two launchers from using the same directory; after an interrupted launcher, remove its `.run.lock` only after confirming that process has stopped.
+
+Full procedure time is shared training-client calibration plus **every** tuning attempt plus three selected final runs per fold. Include calibration once in each method's hypothetical pipeline, and once overall for the combined experiment. Newly measured rerun costs are not historical pilot measurements and must not be appended to old final-run costs. The audit reports minutes saved and percentage savings from the ratio of mean procedure totals; paired final-run percentages are a separate statistic.
 
 ## Reproducibility notes
 
-- Standard SGD without momentum is the only optimizer.
-- Each local update draws a fresh random mini-batch.
-- Calibration seeds are 1001, 1002, and 1003.
-- Validation-selection seeds are 101, 102, and 103.
-- Final evaluation seeds are 1, 2, and 3.
-- Test clients are not evaluated during calibration or hyperparameter selection.
-- Datacenter uses `(t_comm, t_comp) = (0.01, 0.10)` seconds.
-- Edge uses `(t_comm, t_comp) = (0.50, 0.05)` seconds.
-- Timing constants enter the analytical schedule but do not create artificial delays.
+- Standard SGD without momentum; five updates per client visit.
+- One cohort per outer round, with cyclic distinct-client paths and delayed averaging.
+- Calibration seeds `1001,1002,1003` use training clients only.
+- Tuning seeds `101,102,103` use validation clients; final seeds `1,2,3` alone evaluate test clients.
+- Datacenter uses `(t_comm,t_comp)=(0.01,0.10)` seconds; edge uses `(0.50,0.05)` seconds.
+- These constants enter the scheduling formula and do not introduce simulated communication delays. Recorded experiments run clients sequentially on one GeForce GTX 1080.
+- The budget optimum is conditional on the stationarity surrogate described in the paper. Empirical profiling quantities are scheduling inputs, not uniform certificates of the theorem's assumptions.
 
-## Provenance and licensing
+Run the focused protocol/logging checks with `python -m unittest discover -s tests`. `python tests/smoke_archived.py` additionally runs a small CPU example on temporary synthetic clients and verifies logged infeasibility, test isolation and resume. These checks do not replace a complete GPU experiment rerun.
 
-This implementation extends the code associated with *Aggregation Delayed Federated Learning*. Before publishing this repository, add a license compatible with the upstream repository and preserve all required upstream attribution. No license was present in the source working directory from which this minimal supplement was assembled, so no license has been invented here.
+## Attribution and asset terms
 
+The partitions and original RADFed method come from *Aggregation Delayed Federated Learning* ([paper](https://arxiv.org/abs/2108.07433)). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the bundled helper and pretrained checkpoint provenance. No blanket license for this supplement or the original data partitions is asserted; their respective asset terms remain applicable.

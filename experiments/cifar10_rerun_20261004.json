@@ -1,0 +1,216 @@
+{
+  "schema_version": 3,
+  "protocol_name": "documented_cifar10_raw_rate_paired_rerun_20261004",
+  "output_root": "out/cifar10-rerun-20261004/results",
+  "scientific_note": "Prospective rerun, not a reconstruction of the unlogged historical pilot. Archived September 1 training, profiling and raw learning-rate updates are unchanged. Both selectors and both timing regimes are rerun. Calibration uses training clients only. Fixed budgets and tolerances use validation clients with seeds 101-103; final seeds 1-3 alone evaluate test clients. The tolerance candidate set was declared before running this experiment. Every declared candidate is attempted for every fold and tuning seed; infeasible candidates remain in the cost record. No test-based or final-seed-based search expansion is permitted.",
+  "datasets": {
+    "cifar10_datacenter": {
+      "client_data_path": "data/cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366",
+      "common": {
+        "batch_size": 16,
+        "device": "auto",
+        "eval_batch_size": 64,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 200,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.2,
+        "metric": "loss",
+        "mobilenet_weights_path": "mobilenet_checkpoints/mobilenet_v2-7ebf99e0.pth",
+        "model_name": "mobilenetv2",
+        "normalization": "none",
+        "num_classes": 10,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "pretrained_mobilenet": true,
+        "profile_batches": 1,
+        "profile_clients": 6,
+        "profile_frequency": 5,
+        "rounds": 30,
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "weight_decay": 0.0001
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 100.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "require_all_tuning_seeds_feasible": true,
+        "epsilon_candidates": [
+          50,
+          75,
+          100,
+          150,
+          200,
+          300
+        ]
+      }
+    },
+    "cifar10_edge": {
+      "client_data_path": "data/cifar10/100_client_data_dirichlet_noniid_classes_random_qp_alpha1_beta0.1_0.1-0.2opt_loss_piter5e5_biter5e5_seed2366",
+      "common": {
+        "batch_size": 16,
+        "device": "auto",
+        "eval_batch_size": 64,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 200,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.2,
+        "metric": "loss",
+        "mobilenet_weights_path": "mobilenet_checkpoints/mobilenet_v2-7ebf99e0.pth",
+        "model_name": "mobilenetv2",
+        "normalization": "none",
+        "num_classes": 10,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "pretrained_mobilenet": true,
+        "profile_batches": 1,
+        "profile_clients": 6,
+        "profile_frequency": 5,
+        "rounds": 30,
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "weight_decay": 0.0001
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 100.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ],
+      "critical_epsilon_search": {
+        "enabled": true,
+        "method": "critical",
+        "selection_scope": "per_fold",
+        "selection_metric": "current_validation_loss",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ],
+        "require_all_tuning_seeds_feasible": true,
+        "epsilon_candidates": [
+          50,
+          75,
+          100,
+          150,
+          200,
+          300
+        ]
+      }
+    }
+  }
+}

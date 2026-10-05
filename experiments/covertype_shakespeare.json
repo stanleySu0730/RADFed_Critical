@@ -1,0 +1,464 @@
+{
+  "datasets": {
+    "covfeat_l_datacenter": {
+      "client_data_path": "data/covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122",
+      "common": {
+        "batch_size": 256,
+        "device": "auto",
+        "eval_batch_size": 4096,
+        "eval_frequency": 1,
+        "ffn_initialization": "kaiming",
+        "fixed_timing_costs": true,
+        "hidden_size": 64,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.2,
+        "metric": "f1",
+        "model_name": "ffn",
+        "normalization": "local",
+        "normalized_features": 10,
+        "num_classes": 2,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 1,
+        "profile_clients": 6,
+        "profile_frequency": 5,
+        "rounds": 100,
+        "split_prefix": "fold",
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "training_eval_frequency": 5,
+        "weight_decay": 0.0
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          8.0,
+          9.6,
+          12.8,
+          16.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 6,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "max_total_steps": 30,
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 8.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    },
+    "covfeat_l_edge": {
+      "client_data_path": "data/covertype/100_client_data_dirichlet_noniid_cat_features_classes_random_qp_alpha1_lambda0.1_theta0.1_5folds_seed1122",
+      "common": {
+        "batch_size": 256,
+        "device": "auto",
+        "eval_batch_size": 4096,
+        "eval_frequency": 1,
+        "ffn_initialization": "kaiming",
+        "fixed_timing_costs": true,
+        "hidden_size": 64,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.2,
+        "metric": "f1",
+        "model_name": "ffn",
+        "normalization": "local",
+        "normalized_features": 10,
+        "num_classes": 2,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 1,
+        "profile_clients": 6,
+        "profile_frequency": 5,
+        "rounds": 100,
+        "split_prefix": "fold",
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "training_eval_frequency": 5,
+        "weight_decay": 0.0
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          8.0,
+          9.6,
+          12.8,
+          16.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 6,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "max_total_steps": 30,
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 30,
+          "r_local_steps": 5,
+          "target_epsilon": 8.0
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    },
+    "shakespeare_transformer_datacenter": {
+      "client_data_path": "data/shakespeare/143_client_data_seed245",
+      "common": {
+        "batch_size": 256,
+        "device": "auto",
+        "eval_batch_size": 4096,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 128,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.5,
+        "metric": "accuracy",
+        "model_name": "transformer",
+        "normalization": "none",
+        "num_classes": 80,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 1,
+        "profile_clients": 8,
+        "profile_frequency": 10,
+        "rounds": 30,
+        "sequence_length": 80,
+        "t_comm": 0.01,
+        "t_comp": 0.1,
+        "transformer_dropout": 0.0,
+        "transformer_ff_size": 512,
+        "transformer_heads": 4,
+        "transformer_layers": 4,
+        "weight_decay": 0.0
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          0.12,
+          0.15,
+          0.2,
+          0.3,
+          0.5,
+          0.8,
+          448.0,
+          512.0,
+          640.0,
+          768.0,
+          1024.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 4,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "max_total_steps": 40,
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 40,
+          "r_local_steps": 5,
+          "target_epsilon": 0.12
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    },
+    "shakespeare_transformer_edge": {
+      "client_data_path": "data/shakespeare/143_client_data_seed245",
+      "common": {
+        "batch_size": 256,
+        "device": "auto",
+        "eval_batch_size": 4096,
+        "eval_frequency": 1,
+        "fixed_timing_costs": true,
+        "hidden_size": 128,
+        "l_smooth_update": "raw",
+        "learning_rate": 0.5,
+        "metric": "accuracy",
+        "model_name": "transformer",
+        "normalization": "none",
+        "num_classes": 80,
+        "optimizer": "sgd",
+        "participation": 0.1,
+        "profile_batches": 1,
+        "profile_clients": 8,
+        "profile_frequency": 10,
+        "rounds": 30,
+        "sequence_length": 80,
+        "t_comm": 0.5,
+        "t_comp": 0.05,
+        "transformer_dropout": 0.0,
+        "transformer_ff_size": 512,
+        "transformer_heads": 4,
+        "transformer_layers": 4,
+        "weight_decay": 0.0
+      },
+      "critical_epsilon_search": {
+        "automatic_expansion": true,
+        "enabled": true,
+        "epsilon_candidates": [
+          0.12,
+          0.15,
+          0.2,
+          0.3,
+          0.5,
+          0.8,
+          448.0,
+          512.0,
+          640.0,
+          768.0,
+          1024.0
+        ],
+        "expansion_factor": 2.0,
+        "expansion_trigger": "feasibility_only",
+        "max_expansions": 4,
+        "method": "critical",
+        "require_all_tuning_seeds_feasible": true,
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_mean_client_sgd_steps_then_larger_epsilon",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "folds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "grid_search": {
+        "enabled": true,
+        "method": "corrected-fixed",
+        "s_candidates": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8
+        ],
+        "selection_metric": "current_validation_loss",
+        "selection_scope": "per_fold",
+        "tie_breaker": "smaller_e",
+        "tuning_seeds": [
+          101,
+          102,
+          103
+        ]
+      },
+      "l_smooth_calibration": {
+        "aggregation": "maximum",
+        "calibration_seeds": [
+          1001,
+          1002,
+          1003
+        ],
+        "enabled": true,
+        "estimator": "gradient_secant",
+        "relative_probe_distance": 0.001,
+        "selection_scope": "per_fold"
+      },
+      "methods": {
+        "corrected-fixed": {
+          "max_total_steps": 40,
+          "r_local_steps": 5
+        },
+        "critical": {
+          "max_local_steps": 25,
+          "max_total_steps": 40,
+          "r_local_steps": 5,
+          "target_epsilon": 0.12
+        }
+      },
+      "seeds": [
+        1,
+        2,
+        3
+      ]
+    }
+  },
+  "output_root": "results/covertype_shakespeare",
+  "protocol_name": "covertype_shakespeare_recorded_protocols",
+  "schema_version": 3,
+  "scientific_note": "Paper-supplement manifest assembled without changing any scientific setting in the source manifests. It contains only MNIST, CIFAR-10, COVFEAT-L, and Shakespeare Transformer under datacenter and edge timing profiles. Calibration uses training clients; fixed-E and epsilon selection use validation clients; final seeds evaluate test clients only after selections are fixed."
+}
