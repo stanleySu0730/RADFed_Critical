@@ -1,3 +1,4 @@
+"""Client data pipeline: split lists -> arrays -> encoding -> normalization -> batches."""
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -9,7 +10,11 @@ import numpy as np
 import torch
 import torch.nn.functional as torch_functional
 
-from language_utils import ALL_LETTERS
+from .character_encoding import ALL_LETTERS
+from .data_splits import load_client_split
+
+
+CHARACTER_MODEL_NAMES = {"lstm", "shakespeare", "transformer", "character-transformer"}
 
 
 def _load_array(path: Path) -> np.ndarray:
@@ -21,9 +26,6 @@ def _load_array(path: Path) -> np.ndarray:
         return np.asarray(np.loadtxt(path, delimiter=",", dtype=np.float32))
 
 
-def _load_ids(path: Path) -> np.ndarray:
-    values = np.loadtxt(path, delimiter=",", dtype=np.int64)
-    return np.atleast_1d(values).astype(np.int64)
 
 
 def _label_indices(labels: np.ndarray) -> np.ndarray:
@@ -53,6 +55,8 @@ def _encode_sequences(values: np.ndarray, sequence_length: int) -> np.ndarray:
 
 @dataclass
 class ClientDataset:
+    """One client: encoded examples, minibatch sampling, and model input transforms."""
+
     features: np.ndarray
     labels: np.ndarray
     model_name: str
@@ -62,7 +66,7 @@ class ClientDataset:
 
     def __post_init__(self) -> None:
         self.features = np.asarray(self.features)
-        if self.model_name.lower() in {"lstm", "shakespeare"}:
+        if self.model_name.lower() in CHARACTER_MODEL_NAMES:
             self.features = _encode_sequences(self.features, self.sequence_length)
             raw_labels = np.asarray(self.labels).reshape(-1)
             self.labels = np.asarray(
@@ -116,7 +120,7 @@ class ClientDataset:
         features = self.features[indices]
         labels = torch.as_tensor(self.labels[indices], dtype=torch.long, device=device)
         name = self.model_name.lower()
-        if name in {"lstm", "shakespeare"}:
+        if name in CHARACTER_MODEL_NAMES:
             inputs = torch.as_tensor(features, dtype=torch.long, device=device)
         elif name in {"mobilenet", "mobilenetv2", "mbnt"}:
             inputs = torch.as_tensor(features, dtype=torch.float32, device=device)
@@ -222,6 +226,8 @@ class ClientDataset:
 
 @dataclass
 class FederatedData:
+    """Load the saved split, then client arrays, then configured normalization."""
+
     clients: dict[int, ClientDataset]
     train_ids: np.ndarray
     validation_ids: np.ndarray
@@ -237,25 +243,16 @@ class FederatedData:
         normalization: str = "none",
         normalized_features: int | None = None,
         sequence_length: int = 80,
+        split_prefix: str = "fold",
     ) -> "FederatedData":
+        # 1. Read the existing client split; no new partition is sampled.
         root = Path(directory)
-        train_ids = _load_ids(root / f"fold{fold}_tr_client_ids.lst")
-        validation_ids = _load_ids(root / f"fold{fold}_val_client_ids.lst")
-        test_ids = _load_ids(root / f"fold{fold}_te_client_ids.lst")
-        if inner_fold is not None:
-            if int(inner_fold) == int(fold):
-                raise ValueError("inner_fold must differ from the held-out outer fold")
-            candidate_train_ids = np.unique(
-                np.concatenate([train_ids, validation_ids])
-            )
-            inner_validation_ids = _load_ids(
-                root / f"fold{int(inner_fold)}_te_client_ids.lst"
-            )
-            if not np.all(np.isin(inner_validation_ids, candidate_train_ids)):
-                raise ValueError("inner validation fold overlaps the outer test fold")
-            train_ids = np.setdiff1d(candidate_train_ids, inner_validation_ids)
-            validation_ids = inner_validation_ids
+        split = load_client_split(root, fold, inner_fold, split_prefix)
+        train_ids = split.train_ids
+        validation_ids = split.validation_ids
+        test_ids = split.test_ids
         all_ids = np.unique(np.concatenate([train_ids, validation_ids, test_ids]))
+        # 2. Load and encode each client's examples.
         clients = {
             int(client_id): ClientDataset(
                 _load_array(root / f"measures_{int(client_id)}"),
@@ -266,6 +263,7 @@ class FederatedData:
             for client_id in all_ids
         }
         result = cls(clients, train_ids, validation_ids, test_ids)
+        # 3. Apply normalization (global statistics use training clients only).
         result.normalize(normalization, normalized_features)
         return result
 
@@ -277,8 +275,7 @@ class FederatedData:
             raise ValueError("normalization must be none, local, or global")
         if any(
             client.model_name.lower() in {
-                "lstm",
-                "shakespeare",
+                *CHARACTER_MODEL_NAMES,
                 "mobilenet",
                 "mobilenetv2",
                 "mbnt",

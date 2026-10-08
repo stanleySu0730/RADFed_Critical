@@ -1,5 +1,2 @@
 * text=auto
-# Preserve the bytes verified against the experiment artifact on every platform.
-protocols/archived_images_20260901/** -text -whitespace
-experiments/cifar10_rerun_20261004.json -text whitespace=cr-at-eol
 *.pth binary

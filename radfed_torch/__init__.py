@@ -1,4 +1,4 @@
-"""Python 3.12 / PyTorch implementation of the consolidated RADFed design."""
+"""RADFed pipelines and public scheduling and critical-budget helpers."""
 
 from .schedule import ClientPathSchedule, build_without_replacement_schedule
 from .theory import (

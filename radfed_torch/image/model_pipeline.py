@@ -1,3 +1,7 @@
+"""Model pipeline: construct the requested architecture and initialize its weights.
+
+The trainer supplies the data dimensions and seed before calling build_model.
+State copying and averaging retain the model's tensor and buffer conventions."""
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -9,43 +13,18 @@ from torch import nn
 
 
 class FeedForwardNetwork(nn.Module):
-    """ReLU FFN with Kaiming hidden layers"""
-    def __init__(
-        self,
-        input_size: int,
-        hidden_size: int,
-        num_classes: int,
-        *,
-        hidden_sizes: Sequence[int] | None = None,
-        initialization: str = "kaiming",
-    ):
+    def __init__(self, input_size: int, hidden_size: int, num_classes: int):
         super().__init__()
-        widths = tuple(int(value) for value in (hidden_sizes or (hidden_size, hidden_size)))
-        if not widths or any(value <= 0 for value in widths):
-            raise ValueError("FFN hidden sizes must be positive")
-        if initialization not in {"legacy", "kaiming"}:
-            raise ValueError("FFN initialization must be legacy or kaiming")
-        layers: list[nn.Module] = []
-        previous = int(input_size)
-        for width in widths:
-            layers.extend((nn.Linear(previous, width), nn.ReLU()))
-            previous = width
-        layers.append(nn.Linear(previous, num_classes))
-        self.network = nn.Sequential(*layers)
-        self.hidden_sizes = widths
-        self.initialization = initialization
+        self.network = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, num_classes),
+        )
         for layer in self.network:
             if isinstance(layer, nn.Linear):
-                # Identify the output by position: a hidden width can equal
-                # num_classes and still feeds a ReLU, so it needs Kaiming too.
-                if initialization == "kaiming" and layer is not self.network[-1]:
-                    nn.init.kaiming_normal_(
-                        layer.weight, mode="fan_in", nonlinearity="relu"
-                    )
-                elif initialization == "kaiming":
-                    nn.init.xavier_normal_(layer.weight)
-                else:
-                    nn.init.trunc_normal_(layer.weight, std=0.02)
+                nn.init.trunc_normal_(layer.weight, std=0.02)
                 nn.init.zeros_(layer.bias)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
@@ -87,126 +66,23 @@ class CharacterLSTM(nn.Module):
         return self.classifier(output[:, -1, :])
 
 
-class CharacterCausalTransformer(nn.Module):
-    """Small decoder-style Transformer for next-character prediction.
-
-    The default widths intentionally match the two-layer Shakespeare LSTM's
-    parameter count closely, making architecture comparisons meaningful.
-    """
-
-    def __init__(
-        self,
-        vocabulary_size: int,
-        num_classes: int,
-        hidden_size: int = 128,
-        sequence_length: int = 80,
-        num_layers: int = 4,
-        num_heads: int = 4,
-        feedforward_size: int = 512,
-        dropout: float = 0.0,
-    ):
-        super().__init__()
-        if vocabulary_size <= 0 or num_classes <= 1:
-            raise ValueError("Transformer vocabulary and class counts must be positive")
-        if hidden_size <= 0 or sequence_length <= 0:
-            raise ValueError("Transformer hidden size and sequence length must be positive")
-        if num_layers <= 0 or num_heads <= 0 or feedforward_size <= 0:
-            raise ValueError("Transformer layer, head, and feed-forward counts must be positive")
-        if hidden_size % num_heads:
-            raise ValueError("Transformer hidden size must be divisible by its head count")
-        if not 0.0 <= dropout < 1.0:
-            raise ValueError("Transformer dropout must be in [0, 1)")
-
-        self.sequence_length = int(sequence_length)
-        self.token_embedding = nn.Embedding(vocabulary_size, hidden_size)
-        self.position_embedding = nn.Embedding(sequence_length, hidden_size)
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden_size,
-            nhead=num_heads,
-            dim_feedforward=feedforward_size,
-            dropout=dropout,
-            activation="gelu",
-            batch_first=True,
-            norm_first=True,
-        )
-        self.encoder = nn.TransformerEncoder(
-            encoder_layer,
-            num_layers=num_layers,
-            enable_nested_tensor=False,
-        )
-        self.final_norm = nn.LayerNorm(hidden_size)
-        self.classifier = nn.Linear(hidden_size, num_classes)
-        self.register_buffer(
-            "causal_mask",
-            torch.triu(
-                torch.ones(sequence_length, sequence_length, dtype=torch.bool),
-                diagonal=1,
-            ),
-            persistent=False,
-        )
-        nn.init.normal_(self.token_embedding.weight, mean=0.0, std=0.02)
-        nn.init.normal_(self.position_embedding.weight, mean=0.0, std=0.02)
-        nn.init.xavier_uniform_(self.classifier.weight)
-        nn.init.zeros_(self.classifier.bias)
-
-    def encode(self, inputs: torch.Tensor) -> torch.Tensor:
-        if inputs.ndim != 2:
-            raise ValueError("Transformer character input must have shape [batch, time]")
-        time_steps = int(inputs.shape[1])
-        if time_steps <= 0 or time_steps > self.sequence_length:
-            raise ValueError(
-                f"Transformer input length must be in [1, {self.sequence_length}]"
-            )
-        positions = torch.arange(time_steps, device=inputs.device)
-        hidden = self.token_embedding(inputs) + self.position_embedding(positions)[None]
-        return self.encoder(hidden, mask=self.causal_mask[:time_steps, :time_steps])
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        encoded = self.encode(inputs)
-        return self.classifier(self.final_norm(encoded[:, -1, :]))
-
-
 def build_model(
     *,
     model_name: str,
     input_size: int,
     hidden_size: int,
     num_classes: int,
-    ffn_hidden_sizes: Sequence[int] | None = None,
-    ffn_initialization: str = "kaiming",
     vocabulary_size: int = 80,
-    sequence_length: int = 80,
-    transformer_layers: int = 4,
-    transformer_heads: int = 4,
-    transformer_ff_size: int = 512,
-    transformer_dropout: float = 0.0,
     pretrained_mobilenet: bool = False,
     mobilenet_weights_path: str | None = None,
 ) -> nn.Module:
     name = model_name.strip().lower()
     if name in {"ffn", "mlp"}:
-        return FeedForwardNetwork(
-            input_size,
-            hidden_size,
-            num_classes,
-            hidden_sizes=ffn_hidden_sizes,
-            initialization=ffn_initialization,
-        )
+        return FeedForwardNetwork(input_size, hidden_size, num_classes)
     if name in {"lr", "logistic"}:
         return LogisticRegression(input_size, num_classes)
     if name in {"lstm", "shakespeare"}:
         return CharacterLSTM(vocabulary_size, num_classes, hidden_size)
-    if name in {"transformer", "character-transformer"}:
-        return CharacterCausalTransformer(
-            vocabulary_size=vocabulary_size,
-            num_classes=num_classes,
-            hidden_size=hidden_size,
-            sequence_length=sequence_length,
-            num_layers=transformer_layers,
-            num_heads=transformer_heads,
-            feedforward_size=transformer_ff_size,
-            dropout=transformer_dropout,
-        )
     if name in {"mobilenet", "mobilenetv2", "mbnt"}:
         from torchvision.models import MobileNet_V2_Weights, mobilenet_v2
 

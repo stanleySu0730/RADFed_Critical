@@ -1,3 +1,8 @@
+"""Training pipeline: initialize -> choose visits -> local SGD -> redistribute -> average.
+
+Training clients supply updates and gradient profiles. Validation measures the
+current averaged model; test evaluation is reserved for enabled final runs.
+Timing records distinguish measured execution from configured scheduling costs."""
 from __future__ import annotations
 
 from collections import OrderedDict
@@ -14,24 +19,42 @@ import numpy as np
 import torch
 from torch import nn
 
-from .data import ClientDataset, FederatedData
+from .data_pipeline import ClientDataset, FederatedData
 from .metrics import accuracy_score, binary_auc_score, weighted_f1_score
-from .models import average_state_dicts, build_model, clone_state_dict
+from .model_pipeline import average_state_dicts, build_model, clone_state_dict
 from .schedule import build_independent_schedule, build_without_replacement_schedule
-from .theory import (
-    CriticalSchedule,
-    ProfileStatistics,
-    critical_learning_rate,
-    fixed_r_critical_schedule_candidates,
-)
+from .theory import CriticalSchedule, ProfileStatistics, critical_learning_rate, fixed_r_critical_schedule_candidates
+
+
+def retain_nonincreasing_learning_rate(previous: float, candidate: float) -> float:
+    """Accept a smaller candidate rate and retain the previous rate on an increase."""
+
+    previous = float(previous)
+    candidate = float(candidate)
+    if (
+        not math.isfinite(previous)
+        or not math.isfinite(candidate)
+        or previous <= 0
+        or candidate <= 0
+    ):
+        raise ValueError("learning rates must be positive and finite")
+    return min(previous, candidate)
 
 
 @dataclass
 class TrainingConfig:
     method: str = "corrected-fixed"
+    split_prefix: str = "fold"
     model_name: str = "ffn"
     num_classes: int = 2
     hidden_size: int = 64
+    sequence_length: int = 80
+    transformer_layers: int = 4
+    transformer_heads: int = 4
+    transformer_ff_size: int = 512
+    transformer_dropout: float = 0.0
+    ffn_hidden_sizes: tuple[int, ...] | list[int] | None = None
+    ffn_initialization: str = "kaiming"
     rounds: int = 100
     participation: float = 0.1
     r_local_steps: int = 5
@@ -44,6 +67,7 @@ class TrainingConfig:
     optimizer: str = "sgd"
     metric: str = "loss"
     eval_frequency: int = 1
+    training_eval_frequency: int = 0
     profile_frequency: int = 5
     profile_batches: int = 1
     profile_clients: int = 0
@@ -64,6 +88,8 @@ class TrainingConfig:
     shuffle_client_data: bool = False
     evaluate_test: bool = True
     save_model: bool = True
+    evaluate_validation: bool = True
+    profile_diagnostics: bool = False
 
     def validate(self, num_train_clients: int) -> None:
         if num_train_clients <= 0:
@@ -72,13 +98,51 @@ class TrainingConfig:
             "corrected-fixed",
             "critical",
             "critical-r1",
+            "critical-frozen",
             "original-radfed",
             "fedavg",
         }
         if self.method not in allowed:
             raise ValueError(f"method must be one of {sorted(allowed)}")
+        if (
+            not self.split_prefix
+            or Path(self.split_prefix).name != self.split_prefix
+            or any(separator in self.split_prefix for separator in ("/", "\\"))
+        ):
+            raise ValueError("split_prefix must be a nonempty filename prefix")
         if self.num_classes < 2 or self.hidden_size <= 0:
             raise ValueError("num_classes must be at least two and hidden_size positive")
+        if self.sequence_length <= 0:
+            raise ValueError("sequence_length must be positive")
+        if (
+            self.transformer_layers <= 0
+            or self.transformer_heads <= 0
+            or self.transformer_ff_size <= 0
+        ):
+            raise ValueError("Transformer layer, head, and feed-forward sizes must be positive")
+        if not math.isfinite(self.transformer_dropout) or not 0 <= self.transformer_dropout < 1:
+            raise ValueError("transformer_dropout must be in [0, 1)")
+        if self.model_name.lower() in {"transformer", "character-transformer"}:
+            if self.hidden_size % self.transformer_heads:
+                raise ValueError("Transformer hidden size must be divisible by its head count")
+            profiled_objective = (
+                self.method.startswith("critical")
+                or (
+                    self.method == "corrected-fixed"
+                    and self.l_smooth_update == "raw"
+                )
+                or self.profile_diagnostics
+            )
+            if self.transformer_dropout != 0.0 and profiled_objective:
+                raise ValueError(
+                    "profiled Transformer experiments require zero dropout"
+                )
+        if self.ffn_hidden_sizes is not None and (
+            not self.ffn_hidden_sizes or any(int(value) <= 0 for value in self.ffn_hidden_sizes)
+        ):
+            raise ValueError("ffn_hidden_sizes must contain positive values")
+        if self.ffn_initialization not in {"legacy", "kaiming"}:
+            raise ValueError("ffn_initialization must be legacy or kaiming")
         if (
             self.rounds <= 0
             or self.batch_size < -1
@@ -93,9 +157,9 @@ class TrainingConfig:
         if self.r_local_steps <= 0:
             raise ValueError("r_local_steps must be positive")
         if (
-            self.method in {"corrected-fixed", "original-radfed"}
+            self.method in {"corrected-fixed", "critical-frozen", "original-radfed"}
             and not 1 <= self.s_client_visits <= (
-                n_active if self.method == "corrected-fixed" else num_train_clients
+                n_active if self.method in {"corrected-fixed", "critical-frozen"} else num_train_clients
             )
         ):
             raise ValueError("s_client_visits exceeds the method's client limit")
@@ -109,6 +173,15 @@ class TrainingConfig:
             raise ValueError("l_smooth must be a positive finite initial estimate")
         if self.l_smooth_update not in {"fixed", "raw", "ema"}:
             raise ValueError("l_smooth_update must be fixed, raw, or ema")
+        if self.method == "critical-frozen" and self.l_smooth_update != "fixed":
+            raise ValueError("critical-frozen requires fixed L")
+        if self.profile_diagnostics and (
+            self.method not in {"corrected-fixed", "critical-frozen"}
+            or self.l_smooth_update != "fixed"
+        ):
+            raise ValueError("diagnostic-only profiles require a fixed-budget method and fixed L")
+        if not self.evaluate_validation and self.evaluate_test:
+            raise ValueError("training-only calibration must disable test evaluation too")
         if any(
             not math.isfinite(value) or value < 0
             for value in (self.t_comm, self.t_comp, self.t_outer)
@@ -131,8 +204,15 @@ class TrainingConfig:
             raise ValueError("profile_batches must be positive")
         if self.profile_clients < 0:
             raise ValueError("profile_clients must be nonnegative")
-        if self.eval_frequency <= 0 or self.profile_frequency <= 0:
-            raise ValueError("evaluation and profiling frequencies must be positive")
+        if (
+            self.eval_frequency <= 0
+            or self.profile_frequency <= 0
+            or self.training_eval_frequency < 0
+        ):
+            raise ValueError(
+                "validation/profile frequencies must be positive and "
+                "training_eval_frequency must be nonnegative"
+            )
 
 
 class RADFedTrainer:
@@ -154,7 +234,14 @@ class RADFedTrainer:
             input_size=data.input_size,
             hidden_size=config.hidden_size,
             num_classes=config.num_classes,
+            ffn_hidden_sizes=config.ffn_hidden_sizes,
+            ffn_initialization=config.ffn_initialization,
             vocabulary_size=config.num_classes,
+            sequence_length=config.sequence_length,
+            transformer_layers=config.transformer_layers,
+            transformer_heads=config.transformer_heads,
+            transformer_ff_size=config.transformer_ff_size,
+            transformer_dropout=config.transformer_dropout,
             pretrained_mobilenet=config.pretrained_mobilenet,
             mobilenet_weights_path=config.mobilenet_weights_path,
         )
@@ -177,6 +264,7 @@ class RADFedTrainer:
         )
         self.previous_profile_gradient: torch.Tensor | None = None
         self.previous_profile_weights: torch.Tensor | None = None
+        self.previous_profile_client_gradients: torch.Tensor | None = None
         self.current_learning_rate = float(config.learning_rate)
         profile_count = config.profile_clients or self.num_trajectories
         profile_count = min(profile_count, len(self.data.train_ids))
@@ -303,7 +391,7 @@ class RADFedTrainer:
         return corrected_steps
 
     def _schedule(self, s_visits: int) -> np.ndarray:
-        if self.config.method in {"corrected-fixed", "critical", "critical-r1"}:
+        if self.config.method in {"corrected-fixed", "critical", "critical-r1", "critical-frozen"}:
             # The finite population in Phi(S) is the active N-client cohort.
             # Sample that cohort once and keep it fixed for every redistribution
             # in this outer round.  A new cohort is drawn next outer round so all
@@ -352,6 +440,7 @@ class RADFedTrainer:
         ]
         | None = None,
     ) -> tuple[OrderedDict[str, torch.Tensor], float, float, int, int]:
+        # Sample the round's assignment and copy the global model to each path.
         assignments = self._schedule(s_visits)
         trajectories = [
             OrderedDict((key, value.clone()) for key, value in global_state.items())
@@ -363,6 +452,7 @@ class RADFedTrainer:
         total_client_steps = 0
         trajectory_steps = [0 for _ in range(self.num_trajectories)]
 
+        # Each visit trains all paths sequentially on their assigned clients.
         for visit in range(assignments.shape[0]):
             visit_times: list[float] = []
             visit_client_steps = 0
@@ -525,10 +615,12 @@ class RADFedTrainer:
         accumulator: torch.Tensor | None = None
         batch_size = self.config.eval_batch_size
         if self.config.batch_size > 0 and any(
-            isinstance(module, nn.RNNBase) for module in model.modules()
+            isinstance(module, (nn.RNNBase, nn.TransformerEncoder))
+            for module in model.modules()
         ):
-            # Recurrent backward retains substantially more state than evaluation.
-            # Smaller chunks compute the same sample-weighted full gradient.
+            # Sequence-model backward retains substantially more state than
+            # evaluation. Smaller chunks compute the same sample-weighted full
+            # gradient without risking a large profiling allocation.
             batch_size = min(batch_size, self.config.batch_size)
         for indices in client.batches(batch_size):
             batch_gradient = self._batch_gradient(model, client, indices)
@@ -658,6 +750,7 @@ class RADFedTrainer:
         g_sq = float(torch.mean(torch.sum(stacked * stacked, dim=1)))
         sigma_sq = float(np.mean(sigma_samples))
         l_raw: float | None = None
+        l_raw_max_client: float | None = None
         if (
             self.previous_profile_gradient is not None
             and self.previous_profile_weights is not None
@@ -670,6 +763,10 @@ class RADFedTrainer:
                     global_gradient - self.previous_profile_gradient
                 )
                 l_raw = float(gradient_delta / weight_delta)
+                if self.previous_profile_client_gradients is not None:
+                    l_raw_max_client = float(torch.max(torch.linalg.vector_norm(
+                        stacked - self.previous_profile_client_gradients, dim=1
+                    )) / weight_delta)
                 if self.config.l_smooth_update == "raw":
                     if not math.isfinite(l_raw) or l_raw <= 0:
                         raise ValueError("profile produced a nonpositive or invalid L estimate")
@@ -680,6 +777,8 @@ class RADFedTrainer:
                     )
         self.previous_profile_gradient = global_gradient.clone()
         self.previous_profile_weights = current_weights.clone()
+        if self.config.profile_diagnostics:
+            self.previous_profile_client_gradients = stacked.clone()
         elapsed = time.perf_counter() - start
         profile = ProfileStatistics(
             sigma_sq=sigma_sq,
@@ -694,6 +793,7 @@ class RADFedTrainer:
                 "sigma_sq": sigma_sq,
                 "g_sq": g_sq,
                 "l_raw": l_raw,
+                "l_raw_max_client": l_raw_max_client,
                 "l_smooth": self.l_smooth_ema,
                 "profile_seconds": elapsed,
             }
@@ -773,7 +873,7 @@ class RADFedTrainer:
         training_start = time.perf_counter()
         r_steps = self.config.r_local_steps
         s_visits = 1 if self.config.method == "fedavg" else self.config.s_client_visits
-        if self.config.method == "corrected-fixed":
+        if self.config.method in {"corrected-fixed", "critical-frozen"}:
             self.current_learning_rate = critical_learning_rate(
                 self.l_smooth_ema, r_steps * s_visits
             )
@@ -792,7 +892,7 @@ class RADFedTrainer:
             r_steps = selected.r_local_steps
             s_visits = selected.s_client_visits
             self.current_learning_rate = selected.learning_rate
-        elif (
+        elif self.config.profile_diagnostics or (
             self.config.method == "corrected-fixed"
             and self.config.l_smooth_update == "raw"
         ):
@@ -803,6 +903,7 @@ class RADFedTrainer:
         cumulative_redistribution_stages = 0
         cumulative_client_steps = 0
         cumulative_transmitted_bytes = 0
+        cumulative_training_evaluation_seconds = 0.0
         paper_baseline = self.config.method in {"original-radfed", "fedavg"}
         local_stage_index = 0
         for round_index in range(1, self.config.rounds + 1):
@@ -827,6 +928,7 @@ class RADFedTrainer:
                     nonlocal cumulative_redistribution_stages
                     nonlocal cumulative_client_steps
                     nonlocal cumulative_transmitted_bytes
+                    nonlocal cumulative_training_evaluation_seconds
 
                     local_stage_index += 1
                     cumulative_redistribution_stages += 1
@@ -841,7 +943,10 @@ class RADFedTrainer:
 
                     validation_score: float | None = None
                     validation_loss: float | None = None
+                    training_score: float | None = None
+                    training_loss: float | None = None
                     evaluation_seconds = 0.0
+                    training_evaluation_seconds = 0.0
                     should_evaluate = (
                         local_stage_index % self.config.eval_frequency == 0
                         or (
@@ -856,6 +961,26 @@ class RADFedTrainer:
                             self.data.validation_ids
                         )
                         evaluation_seconds = time.perf_counter() - evaluation_start
+                    should_evaluate_training = (
+                        self.config.training_eval_frequency > 0
+                        and visit_index == round_s_visits
+                        and (
+                            round_index % self.config.training_eval_frequency == 0
+                            or round_index == self.config.rounds
+                        )
+                    )
+                    if should_evaluate_training:
+                        self.model.load_state_dict(visit_state)
+                        training_evaluation_start = time.perf_counter()
+                        training_score, training_loss = self.evaluate(
+                            self.data.train_ids
+                        )
+                        training_evaluation_seconds = (
+                            time.perf_counter() - training_evaluation_start
+                        )
+                        cumulative_training_evaluation_seconds += (
+                            training_evaluation_seconds
+                        )
                     self.metrics_rows.append(
                         {
                             "round": local_stage_index,
@@ -865,6 +990,8 @@ class RADFedTrainer:
                             "method": self.config.method,
                             "validation_score": validation_score,
                             "validation_loss": validation_loss,
+                            "training_score": training_score,
+                            "training_loss": training_loss,
                             "r_local_steps": round_r_steps,
                             "s_client_visits": round_s_visits,
                             "e_total_steps": None,
@@ -886,14 +1013,23 @@ class RADFedTrainer:
                             "cumulative_transmitted_bytes": cumulative_transmitted_bytes,
                             "wall_round_seconds": simulator_visit_seconds
                             + evaluation_seconds,
-                            "wall_total_seconds": time.perf_counter() - training_start,
+                            "wall_total_seconds": (
+                                time.perf_counter()
+                                - training_start
+                                - cumulative_training_evaluation_seconds
+                            ),
                             "wall_time_includes_initial_profile": True,
+                            "wall_time_excludes_training_evaluation": True,
                             "simulator_train_seconds": simulator_visit_seconds,
                             "modeled_critical_round_seconds": (
                                 critical_visit_seconds + self.config.t_comm
                             ),
                             "critical_compute_seconds": critical_visit_seconds,
                             "evaluation_seconds": evaluation_seconds,
+                            "training_evaluation_seconds": training_evaluation_seconds,
+                            "cumulative_training_evaluation_seconds": (
+                                cumulative_training_evaluation_seconds
+                            ),
                             "profile_seconds": 0.0,
                             "t_comm_seconds": self.config.t_comm,
                             "t_comp_ema_seconds": self.t_comp_ema,
@@ -940,23 +1076,41 @@ class RADFedTrainer:
 
             validation_score: float | None = None
             validation_loss: float | None = None
+            training_score: float | None = None
+            training_loss: float | None = None
             evaluation_seconds = 0.0
-            if round_index % self.config.eval_frequency == 0 or round_index == self.config.rounds:
+            training_evaluation_seconds = 0.0
+            if self.config.evaluate_validation and (
+                round_index % self.config.eval_frequency == 0 or round_index == self.config.rounds
+            ):
                 evaluation_start = time.perf_counter()
                 validation_score, validation_loss = self.evaluate(self.data.validation_ids)
                 evaluation_seconds = time.perf_counter() - evaluation_start
+            if self.config.training_eval_frequency > 0 and (
+                round_index % self.config.training_eval_frequency == 0
+                or round_index == self.config.rounds
+            ):
+                training_evaluation_start = time.perf_counter()
+                training_score, training_loss = self.evaluate(self.data.train_ids)
+                training_evaluation_seconds = (
+                    time.perf_counter() - training_evaluation_start
+                )
+                cumulative_training_evaluation_seconds += training_evaluation_seconds
             profile_seconds = 0.0
             profile_error: ValueError | None = None
+            proposed_next_learning_rate = round_learning_rate
+            learning_rate_increase_blocked = False
             if (
                 (
-                    self.config.method in {"critical", "critical-r1"}
+                    self.config.profile_diagnostics
+                    or self.config.method in {"critical", "critical-r1"}
                     or (
                         self.config.method == "corrected-fixed"
                         and self.config.l_smooth_update == "raw"
                     )
                 )
                 and round_index % self.config.profile_frequency == 0
-                and round_index < self.config.rounds
+                and (round_index < self.config.rounds or self.config.profile_diagnostics)
             ):
                 profile_start = time.perf_counter()
                 latest_profile = self.profile(round_number=round_index)
@@ -970,14 +1124,30 @@ class RADFedTrainer:
                     else:
                         r_steps = selected.r_local_steps
                         s_visits = selected.s_client_visits
-                        self.current_learning_rate = selected.learning_rate
-                else:
-                    self.current_learning_rate = critical_learning_rate(
+                        proposed_next_learning_rate = selected.learning_rate
+                        learning_rate_increase_blocked = (
+                            proposed_next_learning_rate > self.current_learning_rate
+                        )
+                        self.current_learning_rate = retain_nonincreasing_learning_rate(
+                            self.current_learning_rate,
+                            proposed_next_learning_rate,
+                        )
+                elif not self.config.profile_diagnostics:
+                    proposed_next_learning_rate = critical_learning_rate(
                         latest_profile.l_smooth, r_steps * s_visits
+                    )
+                    learning_rate_increase_blocked = (
+                        proposed_next_learning_rate > self.current_learning_rate
+                    )
+                    self.current_learning_rate = retain_nonincreasing_learning_rate(
+                        self.current_learning_rate,
+                        proposed_next_learning_rate,
                     )
                 profile_seconds = time.perf_counter() - profile_start
 
-            wall_round = time.perf_counter() - outer_start
+            wall_round = (
+                time.perf_counter() - outer_start - training_evaluation_seconds
+            )
             self.metrics_rows.append(
                 {
                     "round": round_index,
@@ -987,6 +1157,8 @@ class RADFedTrainer:
                     "method": self.config.method,
                     "validation_score": validation_score,
                     "validation_loss": validation_loss,
+                    "training_score": training_score,
+                    "training_loss": training_loss,
                     "r_local_steps": round_r_steps,
                     "s_client_visits": round_s_visits,
                     "e_total_steps": (
@@ -996,6 +1168,9 @@ class RADFedTrainer:
                     ),
                     "local_epochs": self.config.local_epochs,
                     "learning_rate": round_learning_rate,
+                    "proposed_next_learning_rate": proposed_next_learning_rate,
+                    "next_learning_rate": self.current_learning_rate,
+                    "learning_rate_increase_blocked": learning_rate_increase_blocked,
                     "active_trajectories": self.num_trajectories,
                     "round_client_sgd_steps": round_client_steps,
                     "max_trajectory_sgd_steps": max_trajectory_steps,
@@ -1007,14 +1182,23 @@ class RADFedTrainer:
                     "round_transmitted_bytes": round_transmitted_bytes,
                     "cumulative_transmitted_bytes": cumulative_transmitted_bytes,
                     "wall_round_seconds": wall_round,
-                    "wall_total_seconds": time.perf_counter() - training_start,
+                    "wall_total_seconds": (
+                        time.perf_counter()
+                        - training_start
+                        - cumulative_training_evaluation_seconds
+                    ),
                     "wall_time_includes_initial_profile": True,
+                    "wall_time_excludes_training_evaluation": True,
                     "simulator_train_seconds": simulator_train_seconds,
                     "modeled_critical_round_seconds": (
                         self.t_outer_ema + redistribution_seconds
                     ),
                     "critical_compute_seconds": critical_compute_seconds,
                     "evaluation_seconds": evaluation_seconds,
+                    "training_evaluation_seconds": training_evaluation_seconds,
+                    "cumulative_training_evaluation_seconds": (
+                        cumulative_training_evaluation_seconds
+                    ),
                     "profile_seconds": profile_seconds,
                     "t_comm_seconds": self.config.t_comm,
                     "t_comp_ema_seconds": self.t_comp_ema,
@@ -1033,9 +1217,20 @@ class RADFedTrainer:
             row
             for row in reversed(self.metrics_rows)
             if bool(row["is_aggregation"])
-            and row["validation_score"] is not None
-            and row["validation_loss"] is not None
+            and (not self.config.evaluate_validation or (
+                row["validation_score"] is not None and row["validation_loss"] is not None
+            ))
         )
+        aggregation_metrics = [
+            row for row in self.metrics_rows if bool(row["is_aggregation"])
+        ]
+        learning_rates = [float(row["learning_rate"]) for row in aggregation_metrics]
+        learning_rate_nonincreasing = all(
+            later <= earlier
+            for earlier, later in zip(learning_rates, learning_rates[1:])
+        )
+        if not learning_rate_nonincreasing:
+            raise RuntimeError("recorded aggregation learning rates increased")
         if self.config.evaluate_test:
             test_score, test_loss = self.evaluate(self.data.test_ids)
         else:
@@ -1047,11 +1242,36 @@ class RADFedTrainer:
             "final_l_smooth": float(self.l_smooth_ema),
             "evaluation_checkpoint": "current_final",
             "test_evaluated": self.config.evaluate_test,
+            "validation_evaluated": self.config.evaluate_validation,
+            "training_evaluated": self.config.training_eval_frequency > 0,
             "current_round": int(current_metrics["round"]),
             "current_outer_round": int(current_metrics["outer_round"]),
             "current_visit_in_outer": int(current_metrics["visit_in_outer"]),
-            "current_validation_score": float(current_metrics["validation_score"]),
-            "current_validation_loss": float(current_metrics["validation_loss"]),
+            "current_validation_score": (
+                float(current_metrics["validation_score"]) if self.config.evaluate_validation else None
+            ),
+            "current_validation_loss": (
+                float(current_metrics["validation_loss"]) if self.config.evaluate_validation else None
+            ),
+            "current_training_score": (
+                float(current_metrics["training_score"])
+                if self.config.training_eval_frequency > 0
+                else None
+            ),
+            "current_training_loss": (
+                float(current_metrics["training_loss"])
+                if self.config.training_eval_frequency > 0
+                else None
+            ),
+            "current_learning_rate": float(current_metrics["learning_rate"]),
+            "next_learning_rate": float(
+                current_metrics.get("next_learning_rate", current_metrics["learning_rate"])
+            ),
+            "learning_rate_nonincreasing": learning_rate_nonincreasing,
+            "learning_rate_increase_blocks": sum(
+                bool(row.get("learning_rate_increase_blocked", False))
+                for row in aggregation_metrics
+            ),
             "test_score": test_score,
             "test_loss": test_loss,
             "local_training_stages": (

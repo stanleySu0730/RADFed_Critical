@@ -1,10 +1,13 @@
-"""Run a named paper protocol with a separate implementation and durable timings."""
+"""Main entry point: select a dataset/profile, validate inputs, then run the paper experiment pipeline.
+
+Each training subprocess receives a durable timing record, including failed and
+infeasible attempts. Resume requires matching configuration, sources, and runtime."""
 from __future__ import annotations
 
 import argparse
 import datetime as dt
 import hashlib
-import importlib.util
+import importlib
 import json
 import os
 from pathlib import Path
@@ -13,13 +16,11 @@ import sys
 import time
 
 PROJECT = Path(__file__).resolve().parent
-ARCHIVE = PROJECT / "protocols" / "archived_images_20260901"
-PROTOCOLS = {
-    "mnist-archive": (ARCHIVE, "mnist_archived_20260901.json", None),
-    "cifar10-archive": (ARCHIVE, "cifar10_archived_20260901.json", None),
-    "cifar10-rerun": (ARCHIVE, "cifar10_rerun_20261004.json", None),
-    "covertype": (PROJECT, "covertype_shakespeare.json", "covfeat_l_"),
-    "shakespeare": (PROJECT, "covertype_shakespeare.json", "shakespeare_transformer_"),
+EXPERIMENTS = {
+    "mnist": ("radfed_torch.image.experiment_pipeline", "mnist.json"),
+    "cifar10": ("radfed_torch.image.experiment_pipeline", "cifar10.json"),
+    "covertype": ("radfed_torch.experiment_pipeline", "covertype.json"),
+    "shakespeare": ("radfed_torch.experiment_pipeline", "shakespeare.json"),
 }
 
 
@@ -41,26 +42,14 @@ def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat()
 
 
-def verify_archive() -> None:
-    for name, expected in read_json(ARCHIVE / "source_hashes.json")["files"].items():
-        if sha256(ARCHIVE / name) != expected:
-            raise ValueError(f"archived source was modified: {name}")
+def source_hashes() -> dict[str, str]:
+    """Record the current entry points and package for compatible resume."""
+    paths = [PROJECT / "main.py", PROJECT / "train.py", *sorted((PROJECT / "radfed_torch").rglob("*.py"))]
+    return {p.relative_to(PROJECT).as_posix(): sha256(p) for p in paths}
 
 
-def source_hashes(source: Path) -> dict[str, str]:
-    paths = [source / "train_pytorch.py", source / "run_paper_experiments.py",
-             source / "language_utils.py", *sorted((source / "radfed_torch").glob("*.py"))]
-    if (source / "plot_pytorch_losses.py").exists():
-        paths.append(source / "plot_pytorch_losses.py")
-    return {p.relative_to(source).as_posix(): sha256(p) for p in paths}
-
-
-def load_runner(source: Path):
-    sys.path.insert(0, str(source))
-    spec = importlib.util.spec_from_file_location("paper_protocol_runner", source / "run_paper_experiments.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+def load_runner(module_name: str):
+    return importlib.import_module(module_name)
 
 
 def runtime() -> dict:
@@ -137,23 +126,31 @@ def documented_run(command, *args, output_root: Path, original_run, **kwargs):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--protocol", required=True, choices=PROTOCOLS)
-    parser.add_argument("--dataset", action="append", default=[], help="one or more entries within this protocol")
-    parser.add_argument("--output-root", help="defaults to results/<protocol>; never reuse historical archives")
+    parser.add_argument("--dataset", required=True, choices=EXPERIMENTS,
+                        help="benchmark to run")
+    parser.add_argument("--profile", choices=["all", "datacenter", "edge"], default="all",
+                        help="timing profile; default runs both profiles")
+    parser.add_argument("--cifar10-selection", choices=["pilot", "validation"], default="pilot",
+                        help="CIFAR tolerance: recorded pilot or the predefined validation search")
+    parser.add_argument("--output-root", help="defaults to results/<dataset> (or cifar10_validation)")
     parser.add_argument("--resume", action="store_true", help="reuse compatible, logged completed trials")
-    parser.add_argument("--validate-only", action="store_true", help="check source hashes, manifest and seed separation without training")
+    parser.add_argument("--validate-only", action="store_true", help="check configuration and seed separation without training")
     args = parser.parse_args()
-    source, manifest_name, prefix = PROTOCOLS[args.protocol]
-    if source == ARCHIVE:
-        verify_archive()
+    if args.dataset != "cifar10" and args.cifar10_selection != "pilot":
+        parser.error("--cifar10-selection applies only to --dataset cifar10")
+    module_name, manifest_name = EXPERIMENTS[args.dataset]
+    experiment_name = args.dataset
+    if args.dataset == "cifar10" and args.cifar10_selection == "validation":
+        manifest_name = "cifar10_validation.json"
+        experiment_name = "cifar10_validation"
     config = PROJECT / "experiments" / manifest_name
     manifest = read_json(config)
-    runner = load_runner(source)
+    runner = load_runner(module_name)
     runner._validate_manifest(manifest)
-    available = {n for n in manifest["datasets"] if prefix is None or n.startswith(prefix)}
-    selected = set(args.dataset) if args.dataset else available
-    if not selected or not selected <= available:
-        raise ValueError(f"choose dataset entries from {sorted(available)}")
+    selected = {name for name in manifest["datasets"]
+                if args.profile == "all" or name.endswith("_" + args.profile)}
+    if not selected:
+        raise ValueError(f"no entries for timing profile {args.profile}")
     for name in selected:
         dataset = manifest["datasets"][name]
         groups = [set(dataset["seeds"])]
@@ -167,8 +164,8 @@ def main() -> None:
                     raise ValueError(f"calibration seeds overlap: {name}")
                 groups.append(group)
     if args.validate_only:
-        print(json.dumps({"status": "validated", "protocol": args.protocol,
-                          "datasets": sorted(selected), "implementation": source.relative_to(PROJECT).as_posix(),
+        print(json.dumps({"status": "validated", "experiment": experiment_name,
+                          "datasets": sorted(selected), "implementation": module_name,
                           "manifest_sha256": sha256(config)}, indent=2))
         return
     os.chdir(PROJECT)
@@ -182,18 +179,18 @@ def main() -> None:
         checkpoint = dataset["common"].get("mobilenet_weights_path")
         if checkpoint and sha256(Path(checkpoint)) != "7ebf99e03e254b273379b23edca7ec0da9f48273b23a332b93c1c99d49e86e8f":
             raise ValueError("MobileNetV2 checkpoint checksum differs")
-    root = Path(args.output_root or f"results/{args.protocol}").resolve()
-    if root == PROJECT or root in PROJECT.parents or root == ARCHIVE or ARCHIVE in root.parents:
+    root = Path(args.output_root or f"results/{experiment_name}").resolve()
+    if root == PROJECT or root in PROJECT.parents or root == PROJECT / "radfed_torch" or PROJECT / "radfed_torch" in root.parents:
         raise ValueError("output root must not overwrite the source tree")
     root.mkdir(parents=True, exist_ok=True)
-    provenance = {"protocol": args.protocol, "manifest_sha256": sha256(config), "source_files": source_hashes(source)}
+    provenance = {"experiment": experiment_name, "manifest_sha256": sha256(config), "source_files": source_hashes()}
     previous_path = root / "runtime_provenance.json"
     if previous_path.exists():
         previous = read_json(previous_path)
         if not args.resume:
             raise ValueError("output exists; choose a new output root or --resume")
         if any(previous.get(k) != v for k, v in provenance.items()):
-            raise ValueError("resume would mix different protocols or training/selection sources")
+            raise ValueError("resume would mix different configurations or training/selection sources")
         for marker in [*root.rglob("results.json"), *root.rglob("infeasible_result.json"),
                        *root.rglob("l_smooth_calibration.json")]:
             if not marker.with_name("execution.json").exists():
@@ -214,14 +211,14 @@ def main() -> None:
             write_json(previous_path, {**provenance, "runtime": environment, "started_at_utc": now()})
             (root / "prospective_manifest.json").write_bytes(config.read_bytes())
         write_json(root / "job_state.json", state)
-        sys.argv = [str(source / "run_paper_experiments.py"), "--config", str(config), "--output-root", str(root)]
+        sys.argv = [str(Path(runner.__file__)), "--config", str(config), "--output-root", str(root)]
         for name in sorted(selected):
             sys.argv.extend(["--dataset", name])
         if args.resume:
             sys.argv.append("--resume")
         subprocess.run = lambda command, *a, **kw: documented_run(command, *a, output_root=root, original_run=original_run, **kw)
         runner.main()
-        state["status"] = "training_complete_pending_audit"
+        state["status"] = "training_complete"
     except BaseException as error:
         state.update(status="failed", failure_type=type(error).__name__, failure_message=str(error))
         raise

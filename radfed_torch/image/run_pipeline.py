@@ -1,3 +1,4 @@
+"""Single-run pipeline: arguments -> data -> configuration -> model -> calibration or training."""
 from __future__ import annotations
 
 import argparse
@@ -6,19 +7,9 @@ import json
 import math
 from pathlib import Path
 
-from .data import FederatedData
-from .theory import NoFeasibleCriticalSchedule
-from .trainer import RADFedTrainer, TrainingConfig
-
-
-def _positive_widths(value: str) -> tuple[int, ...]:
-    try:
-        widths = tuple(int(item.strip()) for item in value.split(","))
-    except ValueError as error:
-        raise argparse.ArgumentTypeError("hidden sizes must be comma-separated integers") from error
-    if not widths or any(width <= 0 for width in widths):
-        raise argparse.ArgumentTypeError("hidden sizes must be positive")
-    return widths
+from .data_pipeline import FederatedData
+from ..theory import NoFeasibleCriticalSchedule
+from .training_pipeline import RADFedTrainer, TrainingConfig
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,41 +20,19 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--inner-fold", type=int, default=None)
     parser.add_argument(
-        "--split-prefix",
-        default="fold",
-        help="prefix for fold client-list files; default uses fold0_tr_client_ids.lst",
-    )
-    parser.add_argument(
         "--method",
-        choices=["corrected-fixed", "critical", "critical-r1", "critical-frozen", "original-radfed", "fedavg"],
+        choices=["corrected-fixed", "critical", "critical-r1", "original-radfed", "fedavg"],
         default="corrected-fixed",
     )
     parser.add_argument(
         "--model",
         "--model-name",
         dest="model_name",
-        choices=["ffn", "lr", "lstm", "transformer", "mobilenetv2", "resnet18"],
+        choices=["ffn", "lr", "lstm", "mobilenetv2", "resnet18"],
         default="ffn",
     )
     parser.add_argument("--num-classes", type=int, required=True)
     parser.add_argument("--hidden-size", type=int, default=64)
-    parser.add_argument("--sequence-length", type=int, default=80)
-    parser.add_argument("--transformer-layers", type=int, default=4)
-    parser.add_argument("--transformer-heads", type=int, default=4)
-    parser.add_argument("--transformer-ff-size", type=int, default=512)
-    parser.add_argument("--transformer-dropout", type=float, default=0.0)
-    parser.add_argument(
-        "--ffn-hidden-sizes",
-        type=_positive_widths,
-        default=None,
-        help="comma-separated FFN widths; omitted preserves the two-layer hidden-size model",
-    )
-    parser.add_argument(
-        "--ffn-initialization",
-        choices=["legacy", "kaiming"],
-        default="kaiming",
-        help="Kaiming ReLU hidden layers and Xavier output (default); legacy reproduces std=0.02",
-    )
     parser.add_argument("--rounds", type=int, default=100)
     parser.add_argument("--participation", type=float, default=0.1)
     parser.add_argument(
@@ -104,21 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="secondary validation score; validation loss is always recorded",
     )
     parser.add_argument("--eval-frequency", type=int, default=1)
-    parser.add_argument(
-        "--training-eval-frequency",
-        type=int,
-        default=0,
-        help=(
-            "evaluate the aggregated model on all training clients every N outer "
-            "rounds and at the final round; 0 disables this diagnostic"
-        ),
-    )
     parser.add_argument("--profile-frequency", type=int, default=5)
     parser.add_argument("--profile-batches", type=int, default=1)
-    parser.add_argument("--profile-diagnostics", action="store_true",
-                        help="measure fixed-budget runs without changing E, L or learning rate")
-    parser.add_argument("--skip-validation-evaluation", dest="evaluate_validation",
-                        action="store_false", help="training-only calibration; also disable test evaluation")
     parser.add_argument(
         "--profile-clients",
         type=int,
@@ -195,30 +151,24 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="do not load or evaluate test clients (used by validation-only tuning runs)",
     )
-    parser.set_defaults(evaluate_test=True, save_model=True, evaluate_validation=True)
+    parser.set_defaults(evaluate_test=True, save_model=True)
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    if args.allow_infeasible_critical and args.evaluate_test:
-        raise ValueError(
-            "--allow-infeasible-critical requires --skip-test-evaluation"
-        )
-    if args.allow_infeasible_critical and not args.method.startswith("critical"):
-        raise ValueError(
-            "--allow-infeasible-critical is valid only for a critical method"
-        )
-    data = FederatedData.load(
+def load_data(args: argparse.Namespace) -> FederatedData:
+    """Apply the selected fold and preprocessing settings."""
+    return FederatedData.load(
         directory=args.client_data_path,
         fold=args.fold,
         inner_fold=args.inner_fold,
         model_name=args.model_name,
         normalization=args.normalization,
         normalized_features=args.normalized_features,
-        sequence_length=args.sequence_length,
-        split_prefix=args.split_prefix,
     )
+
+
+def build_training_config(args: argparse.Namespace):
+    """Separate training options from data-loading and calibration-only options."""
     config_values = vars(args).copy()
     for name in [
         "client_data_path",
@@ -232,7 +182,24 @@ def main() -> None:
     ]:
         config_values.pop(name)
     config = TrainingConfig(**config_values)
+    return config, config_values
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    if args.allow_infeasible_critical and args.evaluate_test:
+        raise ValueError(
+            "--allow-infeasible-critical requires --skip-test-evaluation"
+        )
+    if args.allow_infeasible_critical and not args.method.startswith("critical"):
+        raise ValueError(
+            "--allow-infeasible-critical is valid only for a critical method"
+        )
+    # Load the client split and examples, then initialize the configured model.
+    data = load_data(args)
+    config, config_values = build_training_config(args)
     trainer = RADFedTrainer(data, config)
+    # Calibration is a separate training-client probe, not a final evaluation.
     if args.calibrate_l_only:
         if args.evaluate_test:
             raise ValueError("--calibrate-l-only requires --skip-test-evaluation")
@@ -245,7 +212,6 @@ def main() -> None:
                 "seed": int(args.seed),
                 "client_data_path": str(args.client_data_path),
                 "model_name": str(args.model_name),
-                "split_prefix": str(args.split_prefix),
             }
         )
         output_dir = Path(args.output_dir)
@@ -258,6 +224,7 @@ def main() -> None:
         )
         print(json.dumps(result, indent=2, sort_keys=True))
         return
+    # Run local updates, redistributions, averaging, profiling, and evaluation.
     try:
         result = trainer.train()
     except NoFeasibleCriticalSchedule as error:
